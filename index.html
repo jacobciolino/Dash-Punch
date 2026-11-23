@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dash Punch</title>
+    <link rel="stylesheet" href="typography.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="typography.js"></script>
+  </head>
+  <body>
+    <main class="game-shell">
+      <div id="matchEndFade" class="match-end-fade" aria-hidden="true" hidden><canvas id="matchEndFrame" width="1280" height="720"></canvas></div>
+      <canvas id="menuStars" class="menu-stars" aria-hidden="true" hidden></canvas>
+      <div class="topbar" aria-label="Game header">
+        <h1>Dash Punch</h1>
+        <div class="topbar-actions">
+          <span id="readout" aria-live="polite">Anchor vs Vesper</span>
+          <button id="redCharacterButton" type="button">P1: Anchor</button>
+          <button id="blueCharacterButton" type="button">P2: Vesper</button>
+          <button id="redAiButton" type="button">P1 AI: Off</button>
+          <button id="aiButton" type="button">P2 AI: On</button>
+          <button id="playerCountButton" type="button">Players: 2</button>
+          <button id="setupSlotButton" type="button">Setup: P1</button>
+          <button id="setupCharacterButton" type="button">P1 Character: Anchor</button>
+          <button id="setupAiButton" type="button">P1 AI: Off</button>
+          <button id="teamModeButton" type="button">Teams: FFA</button>
+          <button id="teamAttackButton" type="button">Team Attack: On</button>
+          <button id="stageButton" type="button">Stage: Split</button>
+          <button id="menuButton" type="button">Menu</button>
+          <button id="resetButton" type="button">Reset</button>
+        </div>
+      </div>
+
+      <div id="inputPanel" class="input-panel" aria-label="Input remapping"></div>
+
+      <div id="menuLayer" class="menu-layer" aria-label="Dash Punch menus"></div>
+      <div id="lobbyNotice" class="lobby-notice" role="status" hidden></div>
+
+      <section id="stageBuilderLayer" class="stage-builder-layer" aria-label="Developer Stage Builder" hidden>
+        <header class="builder-header">
+          <div>
+            <div class="menu-kicker">Developer Tool</div>
+            <h2>Stage Builder</h2>
+          </div>
+          <div class="builder-header-actions">
+            <button type="button" data-builder-action="new">New</button>
+            <button type="button" data-builder-action="loadCurrentStage">Load Selected Stage</button>
+            <button type="button" data-builder-action="save">Save</button>
+            <button type="button" data-builder-action="saveAs">Save As</button>
+            <select id="builderSavedStages" aria-label="Saved custom stages"></select>
+            <button type="button" data-builder-action="load">Load</button>
+            <button type="button" data-builder-action="close">Stage Select</button>
+          </div>
+        </header>
+
+        <div class="builder-layout">
+          <aside class="builder-panel builder-tools" aria-label="Stage tools">
+            <h3>Tools</h3>
+            <div class="builder-tool-grid">
+              <button type="button" data-builder-tool="select">Select</button>
+              <button type="button" data-builder-tool="solid">Solid</button>
+              <button type="button" data-builder-tool="oneway">Pass-Through</button>
+              <button type="button" data-builder-tool="moving">Moving Platform</button>
+              <button type="button" data-builder-tool="wrap">Wrap Zone</button>
+              <button type="button" data-builder-tool="spawn">Spawn</button>
+              <button type="button" data-builder-action="delete">Delete</button>
+            </div>
+
+            <label class="builder-field">
+              <span>Spawn Slot</span>
+              <select id="builderSpawnSlot"></select>
+            </label>
+
+            <div class="builder-checks">
+              <label><input id="builderGridVisible" type="checkbox" checked> Grid</label>
+              <label><input id="builderSnapEnabled" type="checkbox" checked> Snap</label>
+              <label><input id="builderShowBounds" type="checkbox" checked> Bounds</label>
+              <label><input id="builderShowLabels" type="checkbox" checked> Labels</label>
+              <label><input id="builderShowSpawns" type="checkbox" checked> Spawns</label>
+            </div>
+
+            <label class="builder-field">
+              <span>Grid Size</span>
+              <select id="builderGridSize">
+                <option value="10">10 px</option>
+                <option value="20" selected>20 px</option>
+                <option value="25">25 px</option>
+                <option value="40">40 px</option>
+              </select>
+            </label>
+
+            <div class="builder-section">
+              <h3>Playtest</h3>
+              <label class="builder-field">
+                <span>Players</span>
+                <input id="builderTestPlayers" type="number" min="2" max="10" step="1" value="2">
+              </label>
+              <div id="builderTestSlots" class="builder-test-slots"></div>
+            </div>
+          </aside>
+
+          <div class="builder-workspace">
+            <div id="builderCanvasWrap" class="builder-canvas-wrap">
+              <canvas id="stageBuilderCanvas" width="1280" height="720" aria-label="Editable stage coordinate space"></canvas>
+            </div>
+            <div class="builder-status">
+              <span id="builderStatus">Select a tool.</span>
+              <span id="builderPointerCoords">x 0 · y 0</span>
+            </div>
+            <div id="builderDataPanel" class="builder-data-panel" hidden>
+              <textarea id="builderDataText" spellcheck="false" aria-label="Stage JSON data"></textarea>
+              <div class="builder-row">
+                <button type="button" data-builder-action="copyJson">Copy JSON</button>
+                <button type="button" data-builder-action="downloadJson">Download JSON</button>
+                <button type="button" data-builder-action="copyRuntime">Copy Runtime Object</button>
+                <button type="button" data-builder-action="importJson">Import Text</button>
+                <button type="button" data-builder-action="hideData">Close Data</button>
+              </div>
+            </div>
+          </div>
+
+          <aside class="builder-panel builder-inspector" aria-label="Stage inspector">
+            <div class="builder-section">
+              <h3>Stage</h3>
+              <div id="builderStageFields" class="builder-form-grid"></div>
+            </div>
+            <div class="builder-section">
+              <h3>Selected Object</h3>
+              <div id="builderObjectFields" class="builder-form-grid"></div>
+            </div>
+            <div class="builder-section builder-object-section">
+              <h3>Objects</h3>
+              <div id="builderObjectList" class="builder-object-list"></div>
+            </div>
+            <div class="builder-section">
+              <h3>Warnings</h3>
+              <div id="builderWarnings" class="builder-warnings"></div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="builder-footer">
+          <div class="builder-row">
+            <button type="button" data-builder-action="undo" aria-label="Undo">Undo</button>
+            <button type="button" data-builder-action="redo" aria-label="Redo">Redo</button>
+            <button type="button" data-builder-action="showData">Import / Export</button>
+            <button type="button" data-builder-action="promote">Add to Stage Select</button>
+          </div>
+          <button class="builder-playtest" type="button" data-builder-action="playtest">Playtest Stage</button>
+        </footer>
+      </section>
+
+      <div id="matchHud" class="match-hud" aria-label="Round and match status" hidden></div>
+      <div class="game-viewport">
+        <div class="game-frame">
+          <button id="pauseButton" class="pause-button" type="button" aria-label="Pause and open menus">Pause</button>
+          <canvas id="game" width="1280" height="720" aria-label="Dash Punch playable prototype"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <script src="presentation-assets.js"></script>
+    <script src="rollback.js"></script>
+    <script src="match-flow.js"></script>
+    <script src="lobby-cards.js"></script>
+    <script src="sports.js"></script>
+    <script src="sports-audio.js"></script>
+    <script src="target-charge.js"></script>
+    <script src="arena-variants.js"></script>
+    <script src="team-objectives.js"></script>
+    <script src="dashball.js"></script>
+    <script src="sandbag.js"></script>
+    <script src="sports-guide.js"></script>
+    <script src="stage-renderer.js"></script>
+    <script src="team-silhouette.js"></script>
+    <script src="boomerang.js"></script>
+    <script src="ice.js"></script>
+    <script src="ember.js"></script>
+    <script src="menu-stars.js"></script>
+    <script src="radial-menu.js"></script>
+    <script src="fighter-presentation.js"></script>
+    <script src="game.js"></script>
+  </body>
+</html>

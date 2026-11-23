@@ -1,0 +1,23 @@
+"use strict";
+const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),{chromium}=require(process.env.PLAYWRIGHT_MODULE||"playwright");
+const root=process.env.CORE_RELEASE_DIR||path.resolve(__dirname,".."),{server}=require(path.join(root,"server.js")),oldRoot=path.resolve("exports/Dash-Punch-Gameplay-Repair-Release-2026-11-14");
+(async()=>{let browser;try{
+  await new Promise(r=>server.listen(0,"127.0.0.1",r));browser=await chromium.launch({headless:true,channel:process.env.BROWSER_CHANNEL||"chrome",args:["--disable-gpu","--disable-background-timer-throttling","--disable-renderer-backgrounding","--disable-backgrounding-occluded-windows"]});
+  const errors=[],results=[],url=`http://127.0.0.1:${server.address().port}/?debugHitboxes=1&netDebug=1`,click=(p,name)=>p.getByRole("button",{name,exact:true}).click();
+  for(const mode of ["versus","standard-open"]){
+    const hc=await browser.newContext({viewport:{width:1440,height:1000}}),gc=await browser.newContext({viewport:{width:1440,height:1000}}),h=await hc.newPage(),g=await gc.newPage(),legacyGuest=mode==="standard-open";
+    if(legacyGuest)await g.route("**/game.js",async route=>route.fulfill({status:200,contentType:"text/javascript",body:fs.readFileSync(path.join(oldRoot,"game.js"),"utf8")}));
+    for(const p of [h,g]){p.on("pageerror",e=>errors.push(e.message));await p.goto(url);await p.addStyleTag({content:".menu-active:not(.countdown-active) .network-debug {pointer-events:none;}"});}
+    await click(h,"Play");if(mode!=="versus"){await click(h,"Dashball");await click(h,"Online 1v1");await click(h,"Soccer \u2014 Open Arena");}await click(h,"Online 1v1");await click(h,"Host Match");await h.waitForFunction(()=>window.__dashPunchDebug.online.state.roomCode.length===6);const code=await h.evaluate(()=>window.__dashPunchDebug.online.state.roomCode);
+    await click(g,"Play");await click(g,"Online 1v1");await g.locator("#onlineRoomCode").fill(code);await click(g,"Join Match");
+    for(const p of [h,g]){await p.waitForFunction(()=>window.__dashPunchDebug.online.state.connected);await click(p,"Choose Fighter");await p.locator('[data-menu-action="chooseOnlineCharacter"][data-character="kite"]').click();await p.locator('[data-net="delay"]').selectOption("50");await p.locator('[data-net="jitter"]').selectOption("15");await p.locator('[data-net="loss"]').selectOption("0.05");await click(p,"Ready");}await click(h,"Start Fight");
+    for(const p of [h,g]){await p.locator("#menuLayer").waitFor({state:"hidden",timeout:30000});await p.waitForFunction(()=>window.__dashPunchDebug.online.rollback.frame>10);if(mode!=="versus")await p.waitForFunction(()=>window.__dashPunchDebug.dashball.state?.phase==="playing");}
+    await h.bringToFront();await h.keyboard.down("d");await h.keyboard.down("Shift");await h.waitForTimeout(150);await h.keyboard.up("Shift");await h.keyboard.up("d");await g.bringToFront();await g.keyboard.down("f");await g.waitForTimeout(100);await g.keyboard.up("f");await g.waitForTimeout(2200);
+    const peers=[];for(const p of [h,g])peers.push(await p.evaluate(()=>{const d=window.__dashPunchDebug;return {stats:d.online.rollback.stats,network:d.online.rollback.networkState,pose:d.kiteAccessory?.pose(0),count:d.kiteAccessory?.count,characters:d.fighters.map(f=>f.data.name),core:JSON.stringify(d.online.rollback.save().core)};}));
+    for(const peer of peers){assert(!peer.network.paused);assert.match(peer.stats.hashStatus,/matched frame/);assert.deepEqual(peer.characters,["Kite","Kite"]);assert(!peer.core.includes("kiteTethers"));delete peer.core;}
+    assert.equal(peers[0].count,2);assert(peers[0].pose);assert(peers[0].stats.rollbacks+peers[1].stats.rollbacks>0);if(legacyGuest)assert.equal(peers[1].count,undefined);else assert.equal(peers[1].count,2);
+    const id=peers[0].network.id;await h.bringToFront();await h.keyboard.press("Escape");for(const p of [h,g])await p.waitForFunction(()=>window.__dashPunchDebug.online.rollback.networkState.paused);await click(h,"Rematch");for(const p of [h,g])await p.waitForFunction(id=>window.__dashPunchDebug.online.rollback.networkState.id!==id&&window.__dashPunchDebug.online.rollback.frame>5,id);
+    results.push({mode,legacyGuest,peers,rematch:true});await hc.close();await gc.close();
+  }
+  assert.deepEqual(errors,[]);fs.mkdirSync("artifacts/kite-accessory",{recursive:true});const result={passed:true,root,transport:"real WebRTC",delay:50,jitter:15,loss:.05,results,errors};fs.writeFileSync("artifacts/kite-accessory/online-results.json",JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+}finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});

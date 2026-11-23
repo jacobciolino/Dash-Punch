@@ -1,0 +1,17 @@
+"use strict";
+const assert=require("node:assert/strict"),{createCanvas}=require(process.env.CANVAS_MODULE||"@napi-rs/canvas"),S=require("../team-silhouette"),{createGame}=require("./simulation-harness");
+const makeCanvas=()=>createCanvas(1,1),cache=S.create({makeCanvas,maxEntries:8,maxPixels:60000});
+const image=createCanvas(18,18),paint=image.getContext("2d");paint.fillStyle="#a875bd";paint.fillRect(5,3,8,12);paint.clearRect(8,6,2,6);
+const frame=cache.frame(image,0,0,18,18,"#35bfff"),o=frame.outline.getContext("2d"),g=frame.glow.getContext("2d"),pixel=(c,x,y)=>[...c.getImageData(x,y,1,1).data];
+assert.equal(pixel(o,11,10)[3],0,"outline may not cover sprite interior");assert(pixel(o,9,10)[3]>0,"thin native outline follows silhouette");assert.equal(pixel(o,6,6)[3],0,"no rectangular frame");
+assert.deepEqual(pixel(o,9,10).slice(0,3),[53,191,255]);assert.equal(pixel(g,11,10)[3],0,"glow is outside original art");
+const broad=image.getContext("2d");broad.clearRect(0,0,18,18);broad.fillStyle="#a875bd";broad.fillRect(3,3,12,12);broad.clearRect(6,6,6,6);
+const hole=cache.frame(image,0,0,18,18,"#ff584f");assert.equal(pixel(hole.outline.getContext("2d"),15,15)[3],0,"transparent hole remains open");
+const output=createCanvas(96,96),ctx=output.getContext("2d");cache.draw(ctx,image,0,0,18,18,20,20,54,54,{color:"#ff584f"});assert.deepEqual(pixel(ctx,30,30),[168,117,189,255],"original interior pixels are unchanged");
+const warm=cache.stats.builds;for(let i=0;i<100;i++)cache.draw(ctx,image,0,0,18,18,20,20,54,54,{color:"#ff584f"});assert.equal(cache.stats.builds,warm);assert(cache.stats.hits>=100);
+for(let i=0;i<1000;i++)cache.frame(image,i%18,0,1,18,`rgb(${i%256},30,50)`);assert(cache.stats.entries<=8);assert(cache.stats.pixels<=60000);
+const game=createGame(),d=game.debug;d.dashball.setup({arena:"total-rush",teamSize:5});const hash=game.rb.hash();assert.equal(d.teamVisuals.color(d.fighters[0]),"#ff584f");assert.equal(d.teamVisuals.color(d.fighters[1]),"#35bfff");d.fighters[0].team=1;assert.equal(d.teamVisuals.color(d.fighters[0]),"#35bfff");d.fighters[0].team=0;
+d.teamVisuals.set({glow:false,outlines:false});assert.equal(game.rb.hash(),hash);d.teamVisuals.set({glow:true,outlines:true});assert.equal(game.rb.hash(),hash);
+const snap=game.rb.save();snap.core.currentTeamModeIndex=0;snap.core.matchMode="standard";snap.core.dashball=null;game.rb.restore(snap);assert.equal(d.teamVisuals.color(d.fighters[0]),null);
+d.sandbag.setup({ruleset:"brawl"});assert.equal(d.teamVisuals.color(d.fighters[0]),"#35bfff");assert.equal(d.teamVisuals.color(d.fighters[1]),"#ff584f");
+console.log("Team silhouettes: native alpha/holes, unchanged artwork, bounded caching, authoritative teams, Sandbag mapping, FFA and presentation-only settings passed.");

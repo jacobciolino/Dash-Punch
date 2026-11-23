@@ -1,0 +1,18 @@
+@font-face {
+  font-family: "BackOut";
+  src: url("assets/fonts/backout/BackOut.woff2") format("woff2");
+  font-style: normal;
+  /* The official Medium face serves existing UI weights without faux bold. */
+  font-weight: 100 900;
+  font-display: block;
+  ascent-override: 100%;
+  descent-override: 30%;
+  line-gap-override: 0%;
+}
+
+:root { --font-ui: "BackOut", system-ui, sans-serif; font-synthesis: none; }
+html { font-family: var(--font-ui); letter-spacing: 0; }
+button, input, select, textarea, kbd, code, pre { font-family: var(--font-ui); }
+.font-loading .game-shell { visibility: hidden; }
+.font-failure-notice { position: fixed; bottom: 8px; left: 8px; z-index: 200; padding: 6px 10px; background: #202322; color: #f3efe4; font: 14px/1.4 var(--font-ui); border: 1px solid #e3c247; }
+.app-tooltip { position: fixed; z-index: 220; max-width: min(320px,calc(100vw - 16px)); padding: 7px 10px; border: 1px solid #899ca5; border-radius: 4px; background: #10191e; color: #f3efe4; font: 16px/1.3 var(--font-ui); pointer-events: none; }

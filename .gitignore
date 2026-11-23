@@ -1,0 +1,24 @@
+node_modules/
+.DS_Store
+npm-debug.log*
+.pnpm-store/
+/exports/
+/artifacts/
+/playtest-release.json
+/*.zip
+/Dash-Punch-Online-Playtest*/
+/Dash-Punch-Updated*/
+/dash-punch-prototype*/
+*.log
+*.tmp
+*.temp
+*~
+.env
+.env.local
+coverage/
+test-results/
+playwright-report/
+
+# Public source copy: keep licensed assets out of GitHub.
+/assets/
+.env*

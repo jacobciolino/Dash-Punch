@@ -1,0 +1,33 @@
+"use strict";
+const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),{chromium}=require(process.env.PLAYWRIGHT_MODULE||"playwright");
+const root=process.env.CORE_RELEASE_DIR||process.cwd(),baseline=path.resolve("exports/Dash-Punch-Soccer-Grass-2026-11-16"),out="artifacts/boulder-scenery";
+(async()=>{let browser;const servers=[];try{
+  fs.mkdirSync(out,{recursive:true});browser=await chromium.launch({headless:true,channel:"chrome",args:["--disable-gpu"]});const errors=[],missing=[];
+  async function open(dir){
+    const {server}=require(path.join(dir,"server.js"));await new Promise(r=>server.listen(0,"127.0.0.1",r));servers.push(server);
+    const p=await browser.newPage({viewport:{width:1280,height:720}});p.on("pageerror",e=>errors.push(e.stack));p.on("response",r=>{if(r.status()>=400)missing.push(r.url());});
+    await p.addInitScript(()=>{window.patternSources=[];const create=CanvasRenderingContext2D.prototype.createPattern;CanvasRenderingContext2D.prototype.createPattern=function(image,...args){window.patternSources.push(image.src||"");return create.call(this,image,...args);};});
+    const source=fs.readFileSync(path.join(dir,"game.js"),"utf8");await p.route("**/game.js",r=>r.fulfill({contentType:"application/javascript",body:source.replace("  function frame(now) {","  function frame(now) {lastTime=now;requestAnimationFrame(frame);return;").replace("      drawDebugHitboxes();","")}));
+    await p.goto(`http://127.0.0.1:${server.address().port}/?debugHitboxes=1`);await p.waitForFunction(()=>window.__dashPunchDebug&&window.DashTypography.status==="ready");
+    await p.evaluate(async()=>{const art=window.DASH_PUNCH_ART,base=art.backdrops["High Perch Drift"],urls=[base.src,base.groundSrc,base.edgeSrc,...art.stageThemes[base.hd2d].layers.flatMap(l=>l.sources)];await Promise.all(urls.map(src=>{const i=new Image();i.src=src;return i.decode();}));document.getElementById("menuLayer").hidden=true;document.body.classList.remove("menu-active");});return p;
+  }
+  const page=await open(root),old=await open(baseline),results=[];
+  async function scene(p,arena,quality="classic",frames=0){
+    await p.evaluate(({arena,quality,frames})=>{const d=window.__dashPunchDebug;d.stagePresentation.setQuality(quality);d.dashball.setup({arena,teamSize:5},{characters:["orbit","spike","chungus","boomerangus","gunman","archer","kite","rain","anchor","phantom"],ai:false,seed:476});if(frames){d.gravity.setDirection("y",-1);for(let n=0;n<frames;n++)d.dashball.step();}d.camera.update(1);d.stagePresentation.draw();},{arena,quality,frames});await p.waitForTimeout(150);await p.evaluate(()=>window.__dashPunchDebug.stagePresentation.draw());
+  }
+  async function sample(p){return p.evaluate(()=>{const d=window.__dashPunchDebug,hash=d.online.rollback.hash();d.stagePresentation.draw();const c=document.getElementById("game"),data=c.getContext("2d").getImageData(0,0,c.width,c.height).data;let ink=2166136261;const colors=new Set();for(let i=0;i<data.length;i+=16){colors.add(`${data[i]},${data[i+1]},${data[i+2]}`);for(let k=0;k<4;k++)ink=Math.imul(ink^data[i+k],16777619);}return {pure:hash===d.online.rollback.hash(),pixels:ink>>>0,colors:colors.size,profile:d.stagePresentation.snapshot().profile?.id,mood:d.stagePresentation.snapshot().mood,rects:d.terrainArt.rects,players:d.fighters.length};});}
+  for(const arena of["boulder-control","gravity-boulder","total-rush"]){
+    await scene(old,arena);const before=await sample(old);
+    for(const quality of["classic","enhanced"]){
+      await scene(page,arena,quality);const after=await sample(page);assert(after.pure);assert.equal(after.players,10);assert.equal(after.profile,"strange-world");assert.deepEqual(after.mood,{parallaxScale:1.15,hazeScale:.9});assert.deepEqual(after.rects,before.rects);assert.notEqual(after.pixels,before.pixels);assert(after.colors>100);
+      for(const size of[{width:1280,height:720},{width:1920,height:1080}]){await page.setViewportSize(size);await page.locator("#game").screenshot({path:`${out}/${arena}-${quality}-${size.width}.png`});}results.push({arena,quality,pure:after.pure,profile:after.profile,colors:after.colors});
+    }
+  }
+  for(const frames of[30,180]){await scene(page,"gravity-boulder","classic",frames);assert((await sample(page)).pure);await page.locator("#game").screenshot({path:`${out}/gravity-${frames}.png`});}
+  const textures=await page.evaluate(()=>window.patternSources);assert(textures.some(src=>src.includes("strange-world/ground.png")));assert(textures.some(src=>src.includes("strange-world/edge.png")));
+  // Unrelated sports keep the exact previous pixels.
+  for(const arena of["standard","elevated","field-goal","golden-rush","volleyball"]){await scene(old,arena);await scene(page,arena);assert.equal((await sample(page)).pixels,(await sample(old)).pixels,arena);}
+  const previews=await page.evaluate(()=>{const d=window.__dashPunchDebug,hash=d.online.rollback.hash(),images=[];for(const arena of["boulder-control","gravity-boulder","total-rush"]){const c=document.createElement("canvas");c.width=640;c.height=360;const ctx=c.getContext("2d"),s=d.sportsGuide.scene("dashball",arena),scale=Math.min(640/s.stage.width,360/s.stage.height);ctx.scale(scale,scale);d.sportsGuide.paint(ctx,s,scale);images.push({arena,png:c.toDataURL()});}return {pure:hash===d.online.rollback.hash(),images};});assert(previews.pure);for(const p of previews.images)fs.writeFileSync(`${out}/preview-${p.arena}.png`,Buffer.from(p.png.split(",")[1],"base64"));
+  await scene(page,"total-rush","enhanced");const perf=await page.evaluate(()=>{const d=window.__dashPunchDebug,before=d.stagePresentation.stats,hash=d.online.rollback.hash(),samples=[];for(let n=0;n<90;n++){const start=performance.now();d.stagePresentation.draw();samples.push(performance.now()-start);}samples.sort((a,b)=>a-b);return {before,after:d.stagePresentation.stats,pure:hash===d.online.rollback.hash(),median:samples[45],p95:samples[85]};});assert(perf.pure);assert.equal(perf.before.builds,perf.after.builds);assert.equal(perf.before.filterPasses,perf.after.filterPasses);
+  assert.deepEqual(errors,[]);assert.deepEqual(missing,[]);const report={passed:true,results,previewPure:previews.pure,sharedTextures:true,unchangedOtherSports:5,perf,errors,missing,benchmark:"90 warmed frozen-scene ten-fighter draws, not a live hardware performance guarantee"};fs.writeFileSync(`${out}/verification.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+}finally{if(browser)await browser.close();for(const server of servers)await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1;});
